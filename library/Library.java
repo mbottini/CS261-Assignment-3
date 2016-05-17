@@ -2,56 +2,49 @@ package library;
 
 import java.io.PrintStream;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Vector;
+import java.util.TreeSet;
+import java.util.TreeMap;
+import java.util.Iterator;
 
 public class Library
 {
-    // Different hashes to look up items by different criteria.
-
-    // Keyword hash for all items.
-    HashMap<String, Vector<Item>> itemKeywordHash =
-        new HashMap<String, Vector<Item>>();
-
     // Book-related hashes.
-    HashMap<String, Book> bookTitleHash = 
-        new HashMap<String, Book>();
+    private TreeMap<String, Book> bookTitleHash = 
+        new TreeMap<String, Book>();
+    private TreeMap<String, TreeSet<Book>> bookAuthorHash =
+        new TreeMap<String, TreeSet<Book>>();
 
-    HashMap<String, Vector<Book>> bookAuthorHash =
-        new HashMap<String, Vector<Book>>();
+    // Music album-related hashes.
+    private TreeMap<String, MusicAlbum> albumTitleHash =
+        new TreeMap<String, MusicAlbum>();
+    private TreeMap<String, TreeSet<MusicAlbum>> albumBandHash =
+        new TreeMap<String, TreeSet<MusicAlbum>>();
+    private TreeMap<String, TreeSet<MusicAlbum>> albumMemberHash =
+        new TreeMap<String, TreeSet<MusicAlbum>>();
 
-    // Music-related hashes.
-    HashMap<String, MusicAlbum> albumTitleHash =
-        new HashMap<String, MusicAlbum>();
+    // Movie-related hashes.
+    private TreeMap<String, Movie> movieTitleHash = 
+        new TreeMap<String, Movie>();
+    private TreeMap<String, TreeSet<Movie>> movieDirectorHash =
+        new TreeMap<String, TreeSet<Movie>>();
+    private TreeMap<String, TreeSet<Movie>> movieActorHash =
+        new TreeMap<String, TreeSet<Movie>>();
 
-    HashMap<String, Vector<MusicAlbum>> albumBandHash =
-        new HashMap<String, Vector<MusicAlbum>>();
-
-    HashMap<String, Vector<MusicAlbum>> albumMusicianHash =
-        new HashMap<String, Vector<MusicAlbum>>();
-
-    //Movie-related hashes.
-
-    HashMap<String, Movie> movieTitleHash =
-        new HashMap<String, Movie>();
-
-    HashMap<String, Movie> movieDirectorHash =
-        new HashMap<String, Vector<Movie>>();
-
-    HashMap<String, Movie> movieActorHash =
-        new HashMap<String, Vector<Movie>>();
-
+    // General hash for keywords.
+    private TreeMap<String, TreeSet<Item>> keywordHash =
+        new TreeMap<String, TreeSet<Item>>();
 
 	// general methods
 	
 	// returns all of the items which have the specified keyword
 	public Collection<Item> itemsForKeyword(String keyword)
 	{
-        return itemKeywordHash.get(keyword);
+		return keywordHash.get(keyword);
 	}
 	
 	// print an item from this library to the output stream provided
-	public void printItem(PrintStream out, Item item) {
+	public void printItem(PrintStream out, Item item)
+	{
         out.println(item);
         return;
 	}
@@ -61,75 +54,36 @@ public class Library
 	// adds a book to the library
 	public Item addBook(String title, String author, int nPages, String... keywords)
 	{
-        
-        // Check to see if the library already contains the book in question.
         if(bookTitleHash.containsKey(title)) {
-            System.out.println("Library already contains " + title + ".");
             return null;
         }
 
-        // Otherwise, add it to the library, which contains the following
-        // hashes:
-
-        // Title hash.
         Book newBook = new Book(title, author, nPages, keywords);
-        bookTitleHash.put(title, newTitle);
+        bookTitleHash.put(title, newBook);
+        hashTreeSetAdd(bookAuthorHash, author, newBook);
 
-        // Author hash, which may or may not already have books by that author.
-        if(bookAuthorHash.containsKey(author)) {
-            bookAuthorHash.get(author).add(newBook);
-        }
-
-        else {
-            bookAuthorHash.put(author, new Vector<Book>());
-            bookAuthorHash.get(author).add(newBook);
-        }
-
-
-        // Keyword hash, which will add an entry for each keyword that's
-        // added.
         for(String s : keywords) {
-            if(itemKeywordHash.containsKey(s)) {
-                itemKeywordHash.get(s).add(newBook);
-            }
-
-            else {
-                itemKeywordHash.put(keyword, new Vector<Item>());
-                itemKeywordHash.get(s).add(newBook);
-            }
+            hashTreeSetAdd(keywordHash, s, newBook);
         }
 
-		return newItem;
+		return newBook;
 	}
 	
 	// removes a book from the library
 	public boolean removeBook(String title)
 	{
-        // If it's not in the library, return false.
-        if(!(bookTitleHash.contains(title))) {
+        Book foundBook = bookTitleHash.get(title);
+
+        if(foundBook == null) {
             return false;
         }
 
-        // Otherwise, we remove it from every hash we have.
-        // Also, for all vector collections, we check to see if the vector is
-        // empty after removal. If so, we remove that vector entirely.
-
-        Book foundBook = bookTitleHash.get(title);
+        bookTitleHash.remove(title);
+        hashTreeSetRemove(bookAuthorHash, foundBook.getAuthor(), foundBook);
 
         for(String s : foundBook.getKeywords()) {
-            itemKeywordHash.get(s).remove(foundBook);
-            if(itemKeywordHash.get(s).isempty()) {
-                itemKeywordHash.remove(s);
-            }
+            hashTreeSetRemove(keywordHash, s, foundBook);
         }
-
-        bookAuthorHash.get(foundBook.getAuthor()).remove(foundBook);
-
-        if(bookAuthorHash.get(foundBook.getAuthor()).isempty()) {
-            bookAuthorHash.remove(foundBook.getAuthor());
-        }
-
-        bookTitleHash.remove(foundBook);
 
         return true;
 	}
@@ -137,13 +91,13 @@ public class Library
 	// returns all of the books by the specified author
 	public Collection<Item> booksByAuthor(String author)
 	{
-		return bookAuthorHash.get(author);
+		return getTreeSet(bookAuthorHash, author);
 	}
 	
 	// returns all of the books in the library
 	public Collection<Item> books()
 	{
-		return bookTitleHash.values();
+        return getTreeSet(bookTitleHash);
 	}
 	
 	// music-related methods
@@ -151,96 +105,61 @@ public class Library
 	// adds a music album to the library
 	public Item addMusicAlbum(String title, String band, int nSongs, String... keywords)
 	{
-        if(albumTitleHash.contains(title)) {
-            System.out.println("Library already contains " + title + ".");
+		if(albumTitleHash.containsKey(title)) {
             return null;
         }
 
         MusicAlbum newAlbum = new MusicAlbum(title, band, nSongs, keywords);
 
-        // We need to add to the titlehash, bandhash, and keywordhash.
-
         albumTitleHash.put(title, newAlbum);
-
-        if(albumBandHash.contains(band)) {
-            albumBandHash.get(band).add(newAlbum);
-        }
-
-        else {
-            albumBandHash.put(band, new Vector<MusicAlbum>());
-            albumBandHash.get(band).add(newAlbum);
-        }
+        hashTreeSetAdd(albumBandHash, band, newAlbum);
 
         for(String s : keywords) {
-            if(itemKeywordHash.containsKey(s)) {
-                itemKeywordHash.get(s).add(newAlbum);
-            }
-
-            else {
-                itemKeywordHash.put(keyword, new Vector<Item>());
-                itemKeywordHash.get(s).add(newAlbum);
-            }
+            hashTreeSetAdd(keywordHash, s, newAlbum);
         }
 
-		return newAlbum;
+        return newAlbum;
 	}
 
 	// adds the specified band members to a music album
 	public void addBandMembers(Item album, String... members)
 	{
-        if(!(album instanceof MusicAlbum)) {
-            return;
+        // Gloriously terrible hack. Grab the album's title, search the
+        // albumTitleHash for that title to get the actual MusicAlbum, and
+        // modify *that*. This gets around the "can't cast Item as MusicAlbum"
+        // problem.
+
+        MusicAlbum foundAlbum = albumTitleHash.get(album.getTitle());
+
+        if(foundAlbum != null) {
+            foundAlbum.setMembers(members);
+
+            for(String s : members) {
+                hashTreeSetAdd(albumMemberHash, s, foundAlbum);
+            }
         }
-
-        album.addMembers(members);
-
-        for(String s : members) {
-            if(albumMusicianHash.contains(s)) {
-                albumMusicianHash.get(s).add(album);
-            }
-
-            else {
-                albumMusicianHash.put(s, new Vector<MusicAlbum>());
-                albumMusicianHash.get(s).add(album);
-            }
         return;
 	}
 	
 	// removes a music album from the library
 	public boolean removeMusicAlbum(String title)
 	{
-        // If it's not in the library, return false.
-        if(!(albumTitleHash.contains(title))) {
+        MusicAlbum foundAlbum = albumTitleHash.get(title);
+
+        if(foundAlbum == null) {
             return false;
         }
 
-        // Otherwise, we remove it from every hash we have.
-        // Also, for all vector collections, we check to see if the vector is
-        // empty after removal. If so, we remove that vector entirely.
-
-        MusicAlbum foundAlbum = albumTitleHash.get(title);
-
+        albumTitleHash.remove(title);
+        hashTreeSetRemove(albumBandHash, foundAlbum.getBand(), foundAlbum);
+        
         for(String s : foundAlbum.getKeywords()) {
-            itemKeywordHash.get(s).remove(foundAlbum);
-            if(itemKeywordHash.get(s).isempty()) {
-                itemKeywordHash.remove(s);
-            }
+            hashTreeSetRemove(keywordHash, s, foundAlbum);
         }
 
-        albumBandHash.get(foundAlbum.getBand()).remove(foundAlbum);
-
-        if(albumBandHash.get(foundAlbum.getBand()).isempty()) {
-            albumBandHash.remove(foundAlbum.getBand());
+        for(String s : foundAlbum.getMembers()) {
+            hashTreeSetRemove(albumMemberHash, s, foundAlbum);
         }
-
-        for(String s : foundAlbum.getMusicians()) {
-            albumMusicianHash.get(s).remove(foundAlbum);
-            if(albumMusicianHash.get(s).isEmpty()) {
-                albumMusicianHash.remove(s);
-            }
-        }
-
-        albumTitleHash.remove(foundAlbum);
 
         return true;
 	}
@@ -248,19 +167,19 @@ public class Library
 	// returns all of the music albums by the specified band
 	public Collection<Item> musicByBand(String band)
 	{
-		return albumBandHash.get(band);
+		return getTreeSet(albumBandHash, band);
 	}
 	
 	// returns all of the music albums by the specified musician
 	public Collection<Item> musicByMusician(String musician)
 	{
-		return albumMusicianHash.get(musician);
+		return getTreeSet(albumMemberHash, musician);
 	}
 	
 	// returns all of the music albums in the library
 	public Collection<Item> musicAlbums()
 	{
-		return albumTitleHash.values();
+        return getTreeSet(albumTitleHash);
 	}
 	
 	// movie-related methods
@@ -268,97 +187,60 @@ public class Library
 	// adds a movie to the library
 	public Item addMovie(String title, String director, int nScenes, String... keywords)
 	{
-        if(movieTitleHash.contains(title)) {
-            System.out.println("Library already contains " + title + ".");
+		if(movieTitleHash.containsKey(title)) {
             return null;
         }
 
         Movie newMovie = new Movie(title, director, nScenes, keywords);
 
-        // We need to add to the titlehash, directorhash, and keywordhash.
-
-        movieTitleHash.put(title, newAlbum);
-
-        if(movieDirectorHash.contains(director)) {
-            movieDirectorHash.get(director).add(newMovie);
-        }
-
-        else {
-            movieDirectorHash.put(director, new Vector<Album>());
-            movieDirectorHash.get(director).add(newMovie);
-        }
+        movieTitleHash.put(title, newMovie);
+        hashTreeSetAdd(movieDirectorHash, director, newMovie);
 
         for(String s : keywords) {
-            if(itemKeywordHash.containsKey(s)) {
-                itemKeywordHash.get(s).add(newMovie);
-            }
-
-            else {
-                itemKeywordHash.put(keyword, new Vector<Item>());
-                itemKeywordHash.get(s).add(newMovie);
-            }
+            hashTreeSetAdd(keywordHash, s, newMovie);
         }
 
-		return newAlbum;
+        return newMovie;
 	}
 
 	// adds the specified actors to a movie
 	public void addCast(Item movie, String... members)
 	{
-        if(!(movie instanceof Movie)) {
-            return;
+        // Same as the Musician hack. Find the movie by searching the
+        // movieTitleHash, set a Movie object equal to the result, and add the
+        // members to *that*.
+
+        Movie foundMovie = movieTitleHash.get(movie.getTitle());
+
+        if(foundMovie != null) {
+            foundMovie.setCast(members);
+
+            for(String s : members) {
+                hashTreeSetAdd(movieActorHash, s, foundMovie);
+            }
         }
-
-        movie.addActors(members);
-
-        for(String s : members) {
-            if(movieActorHash.contains(s)) {
-                movieActorHash.get(s).add(album);
-            }
-
-            else {
-                movieActorHash.put(s, new Vector<Album>());
-                movieActorHash.get(s).add(album);
-            }
         return;
-
 	}
 
 	// removes a movie from the library
 	public boolean removeMovie(String title)
 	{
-        // If it's not in the library, return false.
-        if(!(movieTitleHash.contains(title))) {
+        Movie foundMovie = movieTitleHash.get(title);
+
+        if(foundMovie == null) {
             return false;
         }
 
-        // Otherwise, we remove it from every hash we have.
-        // Also, for all vector collections, we check to see if the vector is
-        // empty after removal. If so, we remove that vector entirely.
-
-        Movie foundMovie = movieTitleHash.get(title);
-
+        movieTitleHash.remove(title);
+        hashTreeSetRemove(movieDirectorHash, foundMovie.getDirector(), foundMovie);
+        
         for(String s : foundMovie.getKeywords()) {
-            itemKeywordHash.get(s).remove(foundMovie);
-            if(itemKeywordHash.get(s).isempty()) {
-                itemKeywordHash.remove(s);
-            }
+            hashTreeSetRemove(keywordHash, s, foundMovie);
         }
 
-        movieDirectorHash.get(foundMovie.getDirector()).remove(foundMovie);
-
-        if(movieDirectorHash.get(foundMovie.getDirector()).isempty()) {
-            movieDirectorHash.remove(foundMovie.getDirector());
+        for(String s : foundMovie.getCast()) {
+            hashTreeSetRemove(movieActorHash, s, foundMovie);
         }
-
-        for(String s : foundAlbum.getActors()) {
-            movieActorHash.get(s).remove(foundMovie);
-            if(movieActorHash.get(s).isEmpty()) {
-                movieActorHash.remove(s);
-            }
-        }
-
-        movieTitleHash.remove(foundMovie);
 
         return true;
 	}
@@ -366,18 +248,71 @@ public class Library
 	// returns all of the movies by the specified director
 	public Collection<Item> moviesByDirector(String director)
 	{
-		return movieDirectorHash.get(director);
+		return getTreeSet(movieDirectorHash, director);
 	}
 	
 	// returns all of the movies by the specified actor
 	public Collection<Item> moviesByActor(String actor)
 	{
-		return movieActorHash.get(actor);
+		return getTreeSet(movieActorHash, actor);
 	}
 	
 	// returns all of the movies in the library
 	public Collection<Item> movies()
 	{
-		return movieTitleHash.values();
+        return getTreeSet(movieTitleHash);
 	}	
+
+    // Private functions. Not accessible to user, but automate some tedious
+    // tasks.
+
+    private <T extends Item> void hashTreeSetAdd(TreeMap<String, TreeSet<T>> hash, 
+            String key, T value) {
+        if(!(hash.containsKey(key))) {
+            hash.put(key, new TreeSet<T>());
+        }
+
+        hash.get(key).add(value);
+        return;
+    }
+
+    private <T extends Item> void hashTreeSetRemove(TreeMap<String, TreeSet<T>> hash,
+            String key, T value) {
+        hash.get(key).remove(value);
+
+        if(hash.get(key).isEmpty()) {
+            hash.remove(key);
+        }
+        return;
+    }
+
+    private <T extends Item> TreeSet<Item> getTreeSet(TreeMap<String, TreeSet<T>> hash,
+            String searchTerm) {
+        TreeSet<Item> returnTreeSet;
+
+        if(hash.containsKey(searchTerm)) {
+		    returnTreeSet = new TreeSet<Item>(hash.get(searchTerm));
+        }
+
+        else {
+            returnTreeSet = null;
+        }
+
+        return returnTreeSet;
+    }
+
+    private <T extends Item> TreeSet<Item> getTreeSet(TreeMap<String, T> hash) {
+        TreeSet<Item> returnTreeSet;
+
+        if(hash.isEmpty()) {
+            returnTreeSet = null;
+        }
+
+        else {
+            returnTreeSet = new TreeSet<Item>(hash.values());
+        }
+
+        return returnTreeSet;
+    }
+
 }
